@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Model Index — сравнение моделей ИИ</title>
+<title>Model Index: сравнение моделей ИИ</title>
 <meta name="description" content="Сравнение моделей ИИ по бенчмаркам, цене и скорости.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23141414'/%3E%3Ctext x='16' y='22' font-family='Arial' font-size='17' fill='%23fff' text-anchor='middle'%3EM%3C/text%3E%3C/svg%3E">
 <style>:root{
@@ -207,7 +207,7 @@ function cell(m,k){
 function chipHtml(id){
   const m = BY[id];
   return `<div class="chip" draggable="true" role="button" tabindex="0" data-id="${id}"
-    title="Правый клик — убрать">${dot(m)}<span>${esc(m.name)}</span>
+    title="Убрать из сравнения">${dot(m)}<span>${esc(m.name)}</span>
     <span class="x" data-act="toggle" data-id="${id}" aria-label="убрать">×</span></div>`;
 }
 function dot(m){ return `<i class="dot" style="background:${COLOR[m.vendor]||'#999'}"></i>`; }
@@ -251,7 +251,7 @@ function rowsTable(ids, keys, sortable){
     const m = BY[id];
     const cells = keys.map(k=>{
       const c = cell(m,k);
-      if(!c) return `<td class="num est">—</td>`;
+      if(!c) return `<td class="num est">нет</td>`;
       const isBest = best[k]!==null && c.v===best[k];
       return `<td class="num${isBest?' lead':''}">${c.est?'<span class="est">≈</span>':''}${METRICS[k].fmt(c.v)}</td>`;
     }).join('');
@@ -270,7 +270,7 @@ function viewCompare(){
     MODELS.map(pickHtml).join('')}</div></div>` : '';
   return `<div class="wrap">
     <h1>Сравнение моделей</h1>
-    <p class="sub">До ${MAX} моделей. Правый клик — добавить или убрать, перетаскивание — порядок столбцов.</p>
+    <p class="sub">До ${MAX} моделей. Клик по карточке добавляет или убирает модель. Чипы можно перетаскивать.</p>
     <div class="selbar">
       <div class="chips" id="chipzone">${state.selected.map(chipHtml).join('')}</div>
       <button class="btn${state.pickerOpen?' on':''}" data-act="picker">${state.pickerOpen?'Свернуть':'Изменить'}</button>
@@ -279,7 +279,7 @@ function viewCompare(){
     <div class="row">${presets}<span class="msg">${esc(state.msg)}</span></div>
     <div class="tabs">${tabs}</div>
     <div class="tw">${rowsTable(state.selected, keys, true)}</div>
-    <p class="note">≈ — расчётная оценка, без пометки — опубликованное значение.</p>
+    <p class="note">Знак ≈ стоит у расчётных оценок. Без знака значение опубликовано.</p>
   </div>`;
 }
 
@@ -288,7 +288,7 @@ function viewModels(){
     <h1>Все модели</h1>
     <p class="sub">${MODELS.length} моделей, ${Object.keys(COLOR).length} лабораторий.</p>
     <div class="tw">${rowsTable(MODELS.map(m=>m.id).sort((a,b)=>BY[b].aa-BY[a].aa), ALL_KEYS, false)}</div>
-    <p class="note">≈ — расчётная оценка, без пометки — опубликованное значение.</p>
+    <p class="note">Знак ≈ стоит у расчётных оценок. Без знака значение опубликовано.</p>
   </div>`;
 }
 

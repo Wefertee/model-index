@@ -2,7 +2,7 @@
 'use strict';
 
 /*
- * Model Index — минимальный сервер обратной связи.
+ * Model Index: минимальный сервер обратной связи.
  * Без зависимостей: node:http + node:sqlite (с откатом на JSONL).
  * Запуск:  node server.js  →  http://127.0.0.1:8123
  */
@@ -88,7 +88,7 @@ function readBody(req) {
     req.on('data', (chunk) => {
       size += chunk.length;
       if (size > MAX_BODY) {
-        reject(Object.assign(new Error('слишком большое сообщение'), { status: 413 }));
+        reject(Object.assign(new Error('Сообщение слишком большое.'), { status: 413 }));
         req.destroy();
         return;
       }
@@ -109,7 +109,7 @@ async function handleFeedback(req, res) {
   const ip = clientIp(req);
   const now = Date.now();
   if (now - (lastHit.get(ip) || 0) < COOLDOWN_MS) {
-    return send(res, 429, { error: 'слишком часто — попробуйте через несколько секунд' });
+    return send(res, 429, { error: 'Слишком часто. Попробуйте через несколько секунд.' });
   }
 
   let raw;
@@ -123,7 +123,7 @@ async function handleFeedback(req, res) {
   try {
     data = JSON.parse(raw || '{}');
   } catch {
-    return send(res, 400, { error: 'тело запроса — не JSON' });
+    return send(res, 400, { error: 'Тело запроса не является JSON.' });
   }
 
   const name = String(data.name || '').trim().slice(0, 80);
@@ -132,8 +132,8 @@ async function handleFeedback(req, res) {
   const trap = String(data.company || '').trim(); // honeypot
 
   if (trap) return send(res, 200, { ok: true, id: 0 }); // тихо игнорируем ботов
-  if (!EMAIL_RE.test(email)) return send(res, 400, { error: 'нужен корректный e-mail' });
-  if (message.length < 4) return send(res, 400, { error: 'сообщение слишком короткое' });
+  if (!EMAIL_RE.test(email)) return send(res, 400, { error: 'Нужен корректный e-mail.' });
+  if (message.length < 4) return send(res, 400, { error: 'Сообщение слишком короткое.' });
 
   const entry = {
     created_at: new Date().toISOString(),
@@ -149,11 +149,11 @@ async function handleFeedback(req, res) {
     id = saveFeedback(entry);
   } catch (err) {
     console.error('[ошибка записи]', err);
-    return send(res, 500, { error: 'не удалось сохранить сообщение' });
+    return send(res, 500, { error: 'Не удалось сохранить сообщение.' });
   }
 
   lastHit.set(ip, now);
-  console.log(`[обратная связь #${id}] ${email} — ${message.length} симв.`);
+  console.log(`[обратная связь #${id}] ${email}, ${message.length} симв.`);
   return send(res, 200, { ok: true, id });
 }
 
@@ -192,22 +192,22 @@ const server = http.createServer(async (req, res) => {
 
     if (url.pathname === '/api/feedback' && req.method === 'GET') {
       const local = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(clientIp(req));
-      if (!local) return send(res, 403, { error: 'список доступен только с этой машины' });
+      if (!local) return send(res, 403, { error: 'Список доступен только с этой машины.' });
       return send(res, 200, { storage, count: listFeedback(200).length, items: listFeedback(50) });
     }
 
     if (req.method === 'GET' || req.method === 'HEAD') return serveStatic(req, res);
 
-    return send(res, 405, { error: 'метод не поддерживается' });
+    return send(res, 405, { error: 'Метод не поддерживается.' });
   } catch (err) {
     console.error('[сервер]', err);
-    if (!res.headersSent) send(res, 500, { error: 'внутренняя ошибка' });
+    if (!res.headersSent) send(res, 500, { error: 'Внутренняя ошибка.' });
   }
 });
 
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
-    console.error(`порт ${PORT} занят — возможно, сервер уже запущен: http://${HOST}:${PORT}`);
+    console.error(`Порт ${PORT} занят. Возможно, сервер уже запущен: http://${HOST}:${PORT}`);
     process.exit(1);
   }
   throw err;
