@@ -18,18 +18,16 @@ Node 22.5+ — используется встроенный `node:sqlite`, за
 
 ## Деплой на VPS
 
-Ubuntu 24.04, без домена, по `http://IP`, обновления — `git push`.
-
-Репозиторий лежит в папке проекта (`main`). На сервере создаётся bare-репозиторий
-`/srv/git/model-index.git` с хуком `deploy/post-receive`: он выкладывает ветку в
-`/opt/model-index` и перезапускает службу.
+GitHub: https://github.com/Wefertee/model-index · Ubuntu 24.04 · `http://IP/` без домена.
 
 ```bash
-git remote add deploy ssh://root@IP/srv/git/model-index.git
-git push deploy main        # выкладка + рестарт
+sudo git clone https://github.com/Wefertee/model-index.git /opt/model-index
+sudo cp /opt/model-index/deploy/model-index.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now model-index
 ```
 
-Полная пошаговая инструкция (Node 22, systemd, порт 80 без root, ufw) — `deploy/DEPLOY.md`.
+Обновление: `git push` локально, `sudo deploy-model-index` на сервере.
+Подробно (Node 22, порт 80 без root, ufw) — `deploy/DEPLOY.md`.
 
 ## Обратная связь
 
