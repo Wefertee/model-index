@@ -1,0 +1,7 @@
+# сервер Linux: в репозитории и в выкладке только LF
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.db binary
