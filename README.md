@@ -16,6 +16,21 @@ node server.js
 Порт меняется переменной окружения: `PORT=3000 node server.js`.
 Node 22.5+ — используется встроенный `node:sqlite`, зависимостей нет.
 
+## Деплой на VPS
+
+Ubuntu 24.04, без домена, по `http://IP`, обновления — `git push`.
+
+Репозиторий лежит в папке проекта (`main`). На сервере создаётся bare-репозиторий
+`/srv/git/model-index.git` с хуком `deploy/post-receive`: он выкладывает ветку в
+`/opt/model-index` и перезапускает службу.
+
+```bash
+git remote add deploy ssh://root@IP/srv/git/model-index.git
+git push deploy main        # выкладка + рестарт
+```
+
+Полная пошаговая инструкция (Node 22, systemd, порт 80 без root, ufw) — `deploy/DEPLOY.md`.
+
 ## Обратная связь
 
 Кнопка «форма обратной связи» в футере открывает модальное окно (`<dialog>`).

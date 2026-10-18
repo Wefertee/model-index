@@ -1,71 +1,93 @@
-# Хостинг на Ubuntu 24.04 без домена (http://IP)
+# Хостинг на Ubuntu 24.04 без домена (http://IP), выкладка через git
 
-Сайт — это папка из двух файлов (`index.html`, `server.js`) и одного сервиса.
-Node сам отдаёт статику и принимает форму, поэтому nginx не нужен: служба слушает порт 80
-и открывается по адресу `http://ВАШ_IP/`.
+Схема:
 
-Всё ниже — от пользователя с `sudo`.
+```
+локально: git commit → git push deploy main
+                            ↓ ssh
+сервер: /srv/git/model-index.git (bare) → хук post-receive
+                            ↓
+        /opt/model-index (рабочая копия) → systemctl restart model-index
+                            ↓
+        http://IP/  — сайт и форма на одном порту
+```
+
+Ниже всё — от пользователя с `sudo`, если не сказано иное.
 
 ---
 
 ## 1. Node 22
 
-В Ubuntu 24.04 в репозитории лежит Node 18, а серверу нужен 22.5+ (встроенный `node:sqlite`).
-Ставим LTS от NodeSource:
+В Ubuntu 24.04 в apt лежит Node 18, а серверу нужен 22.5+ (встроенный `node:sqlite`):
 
 ```bash
 sudo apt update
-sudo apt install -y curl ca-certificates
+sudo apt install -y curl ca-certificates git
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
 node -v        # ждём v22.x
-```
-
-Проверить, что SQLite на месте:
-
-```bash
 node -e "new (require('node:sqlite').DatabaseSync)(':memory:'); console.log('sqlite ok')"
 ```
 
-## 2. Отдельный пользователь и каталог
+## 2. Пользователь и каталог
 
-Сервис не должен работать от root.
+Сервис не работает от root:
 
 ```bash
 sudo useradd --system --home /opt/model-index --shell /usr/sbin/nologin modelindex
 sudo mkdir -p /opt/model-index
 ```
 
-## 3. Закинуть файлы
-
-Со своей машины (Windows, PowerShell или Git Bash, из папки проекта):
+## 3. Пустой репозиторий на сервере
 
 ```bash
-scp index.html server.js root@ВАШ_IP:/opt/model-index/
+sudo mkdir -p /srv/git
+sudo git init --bare --initial-branch=main /srv/git/model-index.git
+sudo chown -R modelindex:modelindex /srv/git/model-index.git
 ```
 
-Без scp — можно через редактор на сервере (`sudo -u modelindex nano /opt/model-index/server.js`),
-но тогда файлы надо вставить целиком.
+Это «склад» без файлов: сюда приходит `push`, а хук раскладывает содержимое в `/opt/model-index`.
 
-Права:
+## 4. Первый push с локальной машины
+
+В папке проекта (репозиторий уже инициализирован, первый коммит есть):
 
 ```bash
+git remote add deploy ssh://root@IP/srv/git/model-index.git
+git push -u deploy main
+```
+
+`IP` — адрес VPS. Спросит пароль root; если сделал `ssh-copy-id root@IP`, спросит ключ и больше не будет.
+
+На этом шаге в `/opt/model-index` ещё пусто: хука нет, `push` только наполнил склад.
+
+## 5. Разовая выкладка и установка хука
+
+```bash
+sudo git --git-dir=/srv/git/model-index.git --work-tree=/opt/model-index checkout -f main
 sudo chown -R modelindex:modelindex /opt/model-index
-sudo chmod 750 /opt/model-index
+
+sudo cp /opt/model-index/deploy/post-receive /srv/git/model-index.git/hooks/post-receive
+sudo chmod +x /srv/git/model-index.git/hooks/post-receive
+sudo chown modelindex:modelindex /srv/git/model-index.git/hooks/post-receive
 ```
 
-## 4. Служба systemd
+Хук хранится в репозитории (`deploy/post-receive`), поэтому его правки тоже версионируются.
+Дальше он сам делает `checkout` в `/opt/model-index`, `git clean -fd` и `systemctl restart`.
+`feedback.db` в `.gitignore`, а `clean` без `-x` игнорируемые файлы не трогает — база при выкладке остаётся на месте.
 
-Скопируйте `deploy/model-index.service` на сервер:
+## 6. Служба systemd
+
+Юнит тоже в репозитории:
 
 ```bash
-scp deploy/model-index.service root@ВАШ_IP:/tmp/
-sudo mv /tmp/model-index.service /etc/systemd/system/model-index.service
+sudo cp /opt/model-index/deploy/model-index.service /etc/systemd/system/model-index.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now model-index
+systemctl status model-index --no-pager
 ```
 
-Либо создайте вручную `sudo nano /etc/systemd/system/model-index.service` и вставьте содержимое файла.
-
-Ключевое место — порт 80 без root:
+Ключевые строки юнита:
 
 ```ini
 Environment=HOST=0.0.0.0
@@ -73,20 +95,10 @@ Environment=PORT=80
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 ```
 
-`HOST=0.0.0.0` обязателен: по умолчанию сервер слушает только 127.0.0.1 и снаружи недоступен.
+`0.0.0.0` — иначе сервер слушает только `127.0.0.1` и снаружи не виден.
+`CAP_NET_BIND_SERVICE` — позволяет службе под обычным пользователем занять порт 80.
 
-Запуск:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now model-index
-systemctl status model-index --no-pager
-```
-
-В статусе должно быть `active (running)`, в логах — строка
-`Model Index: http://0.0.0.0:80 · хранилище: /opt/model-index/feedback.db`.
-
-## 5. Фаервол
+## 7. Фаервол
 
 ```bash
 sudo ufw allow OpenSSH
@@ -95,10 +107,9 @@ sudo ufw enable
 sudo ufw status
 ```
 
-Если у провайдера есть свой файрвол/security group в панели — там тоже надо открыть 80.
-Это самая частая причина «сервис работает, а сайт не открывается».
+Плюс порт 80 в файрволе/security group панели провайдера — это отдельная настройка и самая частая причина «локально работает, снаружи нет».
 
-## 6. Проверка
+## 8. Проверка
 
 ```bash
 curl -I http://127.0.0.1/
@@ -107,38 +118,56 @@ curl -s -X POST http://127.0.0.1/api/feedback \
   -d '{"email":"you@example.com","message":"проверка с сервера"}'
 ```
 
-Ожидаемо: `HTTP/1.1 200 OK` и `{"ok":true,"id":1}`.
-Дальше — в браузере: `http://ВАШ_IP/` → футер → «форма обратной связи» → отправить.
+Ждём `HTTP/1.1 200 OK` и `{"ok":true,"id":1}`. Дальше в браузере: `http://IP/` → футер → «форма обратной связи».
 
-## 7. Смотреть сообщения
+## 9. Обновления
+
+```bash
+git add -A
+git commit -m "поправил таблицу"
+git push deploy main
+```
+
+В ответе будет `→ выкладываю main в /opt/model-index` и `✓ готово`: служба перезапущена, страница открывается с новым кодом (сервер отдаёт без кэша).
+
+Откат:
+
+```bash
+git revert HEAD && git push deploy main
+# или жёстко:
+git reset --hard HEAD~1 && git push --force deploy main
+```
+
+## 10. База и логи
 
 ```bash
 sudo apt install -y sqlite3
 sudo sqlite3 /opt/model-index/feedback.db "select id, created_at, email, message from feedback order by id desc"
+
+journalctl -u model-index -n 50 --no-pager   # последние строки
+journalctl -u model-index -f                 # следить вживую
 ```
 
-Или тем же Node:
+Резервная копия — просто файл:
 
 ```bash
-sudo -u modelindex node -e "const{DatabaseSync}=require('node:sqlite');const d=new DatabaseSync('/opt/model-index/feedback.db');console.table(d.prepare('select id,created_at,email,substr(message,1,50) m from feedback order by id desc').all())"
+sudo cp /opt/model-index/feedback.db ~/feedback-$(date +%F).db
 ```
 
-## 8. Обновить сайт после правок
+## 11. Если хочешь репозиторий на GitHub/GitLab
+
+Схема та же, меняются две вещи: сервер клонирует репозиторий, а обновление — `git pull`.
 
 ```bash
-scp index.html root@ВАШ_IP:/opt/model-index/
-ssh root@ВАШ_IP 'chown modelindex:modelindex /opt/model-index/index.html && systemctl restart model-index'
+# на сервере, вместо шага 3
+sudo git clone https://github.com/USER/model-index.git /opt/model-index
+sudo chown -R modelindex:modelindex /opt/model-index
+
+# обновление вместо push
+ssh root@IP 'cd /opt/model-index && git pull && systemctl restart model-index'
 ```
 
-Перезапуск нужен только из-за `server.js`; для правок одного `index.html` достаточно
-перезалить файл и обновить страницу в браузере (сервер отдаёт без кэша).
-
-## 9. Логи
-
-```bash
-journalctl -u model-index -n 50 --no-pager     # последние строки
-journalctl -u model-index -f                   # следить вживую
-```
+Хук `deploy/post-receive` в этом случае не нужен.
 
 ---
 
@@ -146,16 +175,17 @@ journalctl -u model-index -f                   # следить вживую
 
 | симптом | причина |
 |---|---|
-| `curl 127.0.0.1` работает, снаружи нет | не открыт порт 80 (ufw или файрвол провайдера) |
-| `EADDRINUSE` в логах | порт занят, обычно это `apache2`/`nginx` из образа — `sudo ss -lptn 'sport = :80'` и остановить лишнее |
-| `Permission denied` при старте | забыли `AmbientCapabilities=CAP_NET_BIND_SERVICE` |
-| 502/пустая страница | `WorkingDirectory` не `/opt/model-index` — сервер не нашёл `index.html` |
-| форма отвечает «не отправилось» | сервис упал: `journalctl -u model-index -n 20` |
+| `curl 127.0.0.1` на сервере работает, снаружи нет | закрыт порт 80 (ufw или панель провайдера) |
+| `EADDRINUSE` в логах | порт занят, обычно `apache2`/`nginx` из образа: `sudo ss -lptn 'sport = :80'` |
+| `Permission denied` при старте службы | нет `AmbientCapabilities=CAP_NET_BIND_SERVICE` |
+| страница пустая / 404 | служба смотрит не туда: проверь `WorkingDirectory=/opt/model-index` |
+| `push` прошёл, а сайт старый | хук не установлен или не исполняемый: `ls -l /srv/git/model-index.git/hooks/post-receive` |
+| `fatal: not a git repository` на сервере | забыл `--git-dir` и `--work-tree` в шаге 5 |
+| форма отвечает «не отправилось» | служба упала: `journalctl -u model-index -n 20 --no-pager` |
 
 ## Позже, когда появится домен
 
-Обратный прокси и HTTPS добавляются одним пакетом Caddy (порт 80 на это время
-освобождается, сервис переводится на `PORT=8123`):
+HTTPS добавляется обратным прокси, порт 80 освобождается, служба переводится на `PORT=8123`:
 
 ```bash
 sudo apt install -y caddy
@@ -165,4 +195,4 @@ sudo apt install -y caddy
 #   }
 ```
 
-До этого момента сайт живёт по `http://IP` — без сертификата, это нормально.
+До этого сайт живёт по `http://IP` — без сертификата, и это нормально.
