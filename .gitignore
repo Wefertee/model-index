@@ -1,0 +1,12 @@
+# база сообщений — данные, не код
+feedback.db
+feedback.jsonl
+*.db-wal
+*.db-shm
+*.db-journal
+
+# служебное
+dump.json
+node_modules/
+.DS_Store
+Thumbs.db

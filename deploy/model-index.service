@@ -1,0 +1,32 @@
+[Unit]
+Description=Model Index — site and feedback API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=modelindex
+Group=modelindex
+WorkingDirectory=/opt/model-index
+Environment=HOST=0.0.0.0
+Environment=PORT=80
+ExecStart=/usr/bin/node /opt/model-index/server.js
+Restart=always
+RestartSec=2
+
+# порт 80 без root: ядро разрешает биндинг только этой службе
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+# общая изоляция
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/opt/model-index
+
+[Install]
+WantedBy=multi-user.target
